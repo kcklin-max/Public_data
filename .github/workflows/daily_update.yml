@@ -8,7 +8,6 @@ on:
 jobs:
   update-data:
     runs-on: ubuntu-latest
-    
     permissions:
       contents: write 
 
@@ -16,15 +15,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Setup R
-        uses: r-lib/actions/setup-r@v2
-        
-      - name: Install required R packages
-        run: |
-          Rscript -e 'install.packages(c("httr", "jsonlite", "dplyr", "readr"))'
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
 
-      - name: Run Data Updater Script
-        run: Rscript update_data.R
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas requests
+
+      - name: Run Python Updater Script
+        run: python update_data.py
         env:
           CWA_API_KEY: ${{ secrets.CWA_API_KEY }}
 
@@ -33,5 +35,5 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git add *.csv
-          git diff-index --quiet HEAD || git commit -m "🤖 Auto-update daily weather and flu data"
+          git diff-index --quiet HEAD || git commit -m "🤖 Auto-update daily data via Python"
           git push
