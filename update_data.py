@@ -6,7 +6,7 @@ import pandas as pd
 # 取得北投區氣象預報 (中央氣象署 CWA)
 # ==========================================
 print("開始獲取 CWA 氣象資料...")
-cwa_api_key = os.environ.get('CWA-319B349C-4179-478B-860A-DEC589456C90')
+cwa_api_key = os.environ.get('CWA_API_KEY')
 
 if not cwa_api_key:
     raise ValueError("❌ 找不到 CWA_API_KEY 環境變數，請檢查 GitHub Secrets 設定。")
