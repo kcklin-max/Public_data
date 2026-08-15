@@ -1,4 +1,5 @@
 import os
+import json
 import requests
 import pandas as pd
 
@@ -19,7 +20,6 @@ params = {
 }
 
 try:
-    # 嘗試連線氣象署 API
     res_weather = requests.get(cwa_url, params=params, timeout=30)
     res_weather.raise_for_status()
     weather_data = res_weather.json()
@@ -27,13 +27,26 @@ try:
 except Exception as e:
     raise RuntimeError(f"❌ 連線氣象署失敗: {e}")
 
-# 解析 JSON 樹狀結構
+# 解析 JSON 樹狀結構 (加入防呆與自動偵測機制)
 try:
-    weather_elements = weather_data['records']['locations'][0]['location'][0]['weatherElement']
+    records = weather_data.get('records', {})
+    
+    # 氣象署的 JSON 結構有時是 locations，有時是 location
+    if 'locations' in records:
+        weather_elements = records['locations'][0]['location'][0]['weatherElement']
+    elif 'location' in records:
+        weather_elements = records['location'][0]['weatherElement']
+    else:
+        # 如果都不是，就把氣象署實際傳來的內容完整印出來，讓我們知道發生什麼事！
+        print("❌ 未知的資料格式！氣象署實際回傳的內容為：")
+        print(json.dumps(weather_data, ensure_ascii=False, indent=2))
+        raise KeyError("找不到 locations 或 location 欄位")
+
     pop_data = next(item for item in weather_elements if item["elementName"] == "PoP12h")['time']
     maxt_data = next(item for item in weather_elements if item["elementName"] == "MaxT")['time']
 except Exception as e:
-    raise RuntimeError(f"❌ 解析氣象資料結構失敗，可能是氣象署回傳格式有變: {e}")
+    print("❌ 解析氣象資料結構失敗，請查看上方的 JSON 內容。")
+    raise e
 
 # 萃取數值並加入防呆處理 (若無資料則補 0)
 try:
