@@ -7,9 +7,18 @@ library(readr)
 # 1. 取得台北市類流感就診人次 (疾管署 CDC)
 # ==========================================
 cdc_url <- "https://od.cdc.gov.tw/eic/NHI_Influenza_like_illness.csv"
-cdc_data <- read_csv(cdc_url, show_col_types = FALSE)
 
-# 【修正】找出資料庫中「最新的一年」以及「該年的最新一週」
+# 【修正】使用 httr 加入 User-Agent 偽裝成瀏覽器，並將 Timeout 延長至 30 秒
+res_cdc <- GET(
+  cdc_url, 
+  add_headers(`User-Agent` = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"),
+  timeout(30)
+)
+
+# 讀取下載下來的原始資料
+cdc_data <- read_csv(content(res_cdc, "raw"), show_col_types = FALSE)
+
+# 找出資料庫中「最新的一年」以及「該年的最新一週」
 latest_year <- max(cdc_data$年, na.rm = TRUE)
 latest_week <- max(cdc_data$週[cdc_data$年 == latest_year], na.rm = TRUE)
 
