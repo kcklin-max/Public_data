@@ -4,19 +4,23 @@ library(dplyr)
 library(readr)
 
 # ==========================================
+# 0. 全域設定
+# ==========================================
+# 強制將 R 系統的網路連線等待時間延長至 120 秒 (解決 10 秒 Timeout)
+options(timeout = 120)
+
+# ==========================================
 # 1. 取得台北市類流感就診人次 (疾管署 CDC)
 # ==========================================
 cdc_url <- "https://od.cdc.gov.tw/eic/NHI_Influenza_like_illness.csv"
 
-# 【修正】使用 httr 加入 User-Agent 偽裝成瀏覽器，並將 Timeout 延長至 30 秒
-res_cdc <- GET(
-  cdc_url, 
-  add_headers(`User-Agent` = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"),
-  timeout(30)
-)
+# 使用 R 內建的 download.file 方法，將檔案先下載到虛擬環境的暫存檔中
+# 這個方法在 GitHub Actions 上比 httr 更穩定，不容易被政府防火牆誤擋
+temp_cdc <- tempfile(fileext = ".csv")
+download.file(cdc_url, destfile = temp_cdc, mode = "wb")
 
-# 讀取下載下來的原始資料
-cdc_data <- read_csv(content(res_cdc, "raw"), show_col_types = FALSE)
+# 讀取剛剛下載的暫存 CSV 檔
+cdc_data <- read_csv(temp_cdc, show_col_types = FALSE)
 
 # 找出資料庫中「最新的一年」以及「該年的最新一週」
 latest_year <- max(cdc_data$年, na.rm = TRUE)
@@ -35,7 +39,7 @@ write_csv(taipei_latest, "taipei_latest.csv")
 # 2. 取得北投區氣象預報 (中央氣象署 CWA)
 # ==========================================
 # 從 GitHub Secrets 讀取環境變數 (保護 API Key 不外流)
-cwa_api_key <- Sys.getenv("CWA-319B349C-4179-478B-860A-DEC589456C90") 
+cwa_api_key <- Sys.getenv("CWA_API_KEY") 
 url_weather <- paste0("https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-063?",
                       "Authorization=", cwa_api_key, 
                       "&locationName=北投區",
@@ -51,8 +55,7 @@ weather_elements <- weather_json$records$locations$location[[1]]$weatherElement[
 pop_data <- weather_elements %>% filter(elementName == "PoP12h") %>% pull(time) %>% .[[1]]
 maxt_data <- weather_elements %>% filter(elementName == "MaxT") %>% pull(time) %>% .[[1]]
 
-# 【修正】萃取數值並加入 NA 防呆處理 (若無資料則補 0)
-# 註：GitHub Actions 若固定於台灣早上 6 點執行，index [[1]] 即為當天 06-18，index [[2]] 為當天 18-06
+# 萃取數值並加入 NA 防呆處理 (若無資料則補 0)
 max_t_val <- as.numeric(maxt_data$elementValue[[1]]$value[1])
 pop_0018_val <- as.numeric(pop_data$elementValue[[1]]$value[1])
 pop_1824_val <- as.numeric(pop_data$elementValue[[2]]$value[1])
