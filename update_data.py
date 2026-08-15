@@ -1,5 +1,4 @@
 import os
-import json
 import requests
 import pandas as pd
 
@@ -27,41 +26,55 @@ try:
 except Exception as e:
     raise RuntimeError(f"❌ 連線氣象署失敗: {e}")
 
-# 解析 JSON 樹狀結構 (加入防呆與自動偵測機制)
+# 解析 JSON 樹狀結構 (修正大小寫與區域名稱對位)
 try:
     records = weather_data.get('records', {})
     
-    # 氣象署的 JSON 結構有時是 locations，有時是 location
-    if 'locations' in records:
-        weather_elements = records['locations'][0]['location'][0]['weatherElement']
-    elif 'location' in records:
-        weather_elements = records['location'][0]['weatherElement']
-    else:
-        # 如果都不是，就把氣象署實際傳來的內容完整印出來，讓我們知道發生什麼事！
-        print("❌ 未知的資料格式！氣象署實際回傳的內容為：")
-        print(json.dumps(weather_data, ensure_ascii=False, indent=2))
-        raise KeyError("找不到 locations 或 location 欄位")
+    # 找尋 Locations 陣列
+    locations_list = records.get('Locations') or records.get('locations') or []
+    if not locations_list:
+        raise KeyError("找不到 Locations 陣列")
+        
+    # 從 Locations 中找到包含 Location 陣列的那一層
+    location_array = locations_list[0].get('Location') or locations_list[0].get('location')
+    if not location_array:
+        raise KeyError("找不到 Location 陣列")
 
-    pop_data = next(item for item in weather_elements if item["elementName"] == "PoP12h")['time']
-    maxt_data = next(item for item in weather_elements if item["elementName"] == "MaxT")['time']
+    # 尋找 "北投區" 的資料
+    target_location = None
+    for loc in location_array:
+        if loc.get('LocationName') == '北投區' or loc.get('locationName') == '北投區':
+            target_location = loc
+            break
+            
+    if not target_location:
+         raise KeyError("在回傳資料中找不到『北投區』的資料，可能是 API 參數失效傳回全部或不包含該區")
+
+    # 取得氣象元素列表
+    weather_elements = target_location.get('WeatherElement') or target_location.get('weatherElement')
+
+    # 尋找最高溫 (MaxT) 和 降雨機率 (PoP12h)
+    pop_data = next(item for item in weather_elements if item["ElementName"] == "PoP12h" or item["elementName"] == "PoP12h")['Time']
+    maxt_data = next(item for item in weather_elements if item["ElementName"] == "MaxT" or item["elementName"] == "MaxT")['Time']
+
 except Exception as e:
-    print("❌ 解析氣象資料結構失敗，請查看上方的 JSON 內容。")
-    raise e
+    raise RuntimeError(f"❌ 解析氣象資料結構失敗，請檢查欄位大小寫: {e}")
 
 # 萃取數值並加入防呆處理 (若無資料則補 0)
 try:
-    max_t_val = float(maxt_data[0]['elementValue'][0]['value'])
-except (IndexError, ValueError, KeyError):
+    # 這裡的 JSON 結構也是大寫開頭 ElementValue, MaxTemperature, ProbabilityOfPrecipitation
+    max_t_val = float(maxt_data[0]['ElementValue'][0].get('MaxTemperature') or maxt_data[0]['ElementValue'][0].get('value') or 0.0)
+except (IndexError, ValueError, KeyError, TypeError):
     max_t_val = 0.0
 
 try:
-    pop_0018_val = float(pop_data[0]['elementValue'][0]['value']) / 100.0
-except (IndexError, ValueError, KeyError):
+    pop_0018_val = float(pop_data[0]['ElementValue'][0].get('ProbabilityOfPrecipitation') or pop_data[0]['ElementValue'][0].get('value') or 0.0) / 100.0
+except (IndexError, ValueError, KeyError, TypeError):
     pop_0018_val = 0.0
 
 try:
-    pop_1824_val = float(pop_data[1]['elementValue'][0]['value']) / 100.0
-except (IndexError, ValueError, KeyError):
+    pop_1824_val = float(pop_data[1]['ElementValue'][0].get('ProbabilityOfPrecipitation') or pop_data[1]['ElementValue'][0].get('value') or 0.0) / 100.0
+except (IndexError, ValueError, KeyError, TypeError):
     pop_1824_val = 0.0
 
 # 建立 DataFrame 並輸出成 CSV
